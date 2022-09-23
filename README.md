@@ -1,3 +1,3 @@
 # Sudoku
 
-<b>WIP<\b> - Unity based Sudoku game
+<b>WIP</b> - Unity based Sudoku game
