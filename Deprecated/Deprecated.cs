@@ -339,4 +339,21 @@
                         }
 
 
+/// <summary>
+    /// Attempts to build the game board recursively untill a solvable board is built.
+    /// </summary>
+    private void BuildGame()
+    {
+        // Build the game
+        GenerateFinishedSolution();
+        RemoveCellValues();
+        SaveStartPoint();
+
+        // If couldn't solve -> start over!
+        if (!Solve())
+            BuildGame();
+        else
+            ResetToStart();
+    }
+
 */

@@ -3,7 +3,6 @@ using TMPro;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine.UI;
-using System.Diagnostics;
 
 /// <summary>
 /// Class responsible for controlling the sudoku game
@@ -14,9 +13,9 @@ public sealed class SudokuController : MonoBehaviour
     public static SudokuController Instance { get { return instance; } }
 
 #if UNITY_EDITOR
-    [SerializeField, Tooltip("The number of times ")]
-    private int iterations = 50;
-    private List<(int, int)> iterationTimes = new();
+    [SerializeField, Tooltip("The number of times to repeat the build")]
+    private int iterations = 1;
+    private readonly List<(long, long, int)> iterationTimes = new();
 #endif
 
     private int[] cellPossibleValues = new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
@@ -43,6 +42,12 @@ public sealed class SudokuController : MonoBehaviour
     [HideInInspector]
     public bool Annotate = false;
 
+    private delegate bool InferMethod(NumberCell cell);
+    /// <summary>
+    /// The method used to determine whether a cells value can be inferred.
+    /// </summary>
+    private InferMethod inferMethod;
+
     private E_SessionDifficulty difficulty;
 
     /// <summary>
@@ -63,7 +68,7 @@ public sealed class SudokuController : MonoBehaviour
             instance = this;
     }
 
-    void Start()
+    private void Start()
     {
         scoreBoard = transform.Find("ScoreBoard").GetComponent<ScoreBoard>();
 
@@ -72,7 +77,7 @@ public sealed class SudokuController : MonoBehaviour
 
         if (allCells.Length != TOTAL_CELLS)
         {
-            UnityEngine.Debug.LogError($"Grid must contain exactly {TOTAL_CELLS} cells");
+            Debug.LogError($"Grid must contain exactly {TOTAL_CELLS} cells");
             return;
         }
 
@@ -104,102 +109,92 @@ public sealed class SudokuController : MonoBehaviour
     }
 
     /// <summary>
-    /// Start a new, randomly generated easy session. All values will be directly inferable.
+    /// Starts a new game session with the specified <paramref name="sessionDifficulty"/>.
     /// </summary>
-    public void NewEasySession()
+    /// <param name="sessionDifficulty"></param>
+    public void NewSession(int sessionDifficulty)
     {
-        difficulty = E_SessionDifficulty.Easy;
-        scoreBoard.SetDifficultyDisplay(E_SessionDifficulty.Easy.ToString());
-        inferMethod = IsDirectlyInferable;
-        NewSession();
-    }
+        difficulty = (E_SessionDifficulty)sessionDifficulty;
+        scoreBoard.SetDifficultyDisplay(difficulty.ToString());
 
-    /// <summary>
-    /// Start a new, randomly generated medium session. All values will be directly inferable.
-    /// </summary>
-    public void NewMediumSession()
-    {
-        difficulty = E_SessionDifficulty.Medium;
-        scoreBoard.SetDifficultyDisplay(E_SessionDifficulty.Medium.ToString());
-        inferMethod = IsDirectlyInferable;
-        NewSession();
-    }
+        inferMethod = difficulty == E_SessionDifficulty.Hard ? IsInferable : IsDirectlyInferable;
 
-    /// <summary>
-    /// Start a new, randomly generated hard session. All values will be directly inferable.
-    /// </summary>
-    public void NewHardSession()
-    {
-        difficulty = E_SessionDifficulty.Hard;
-        scoreBoard.SetDifficultyDisplay(E_SessionDifficulty.Hard.ToString());
-        inferMethod = IsInferable;
-        NewSession();
-    }
-
-    private void NewSession()
-    {
 #if UNITY_EDITOR
-        Stopwatch buildSw = new();
-        Stopwatch otherSw = new();
-#endif
+        for (int i = 0; i < iterations; i++)
+            GenerateGame();
 
+        long averageBuildTime = 0L;
+        long averageOtherTime = 0L;
+        int averageCellsToFill = 0;
+
+        for (int i = 0; i < iterationTimes.Count(); i++)
+        {
+            averageBuildTime += iterationTimes[i].Item1;
+            averageOtherTime += iterationTimes[i].Item2;
+            averageCellsToFill += iterationTimes[i].Item3;
+        }
+
+        averageBuildTime /= iterationTimes.Count();
+        averageOtherTime /= iterationTimes.Count();
+        averageCellsToFill /= iterationTimes.Count();
+
+        Debug.Log($"Build: {averageBuildTime}  -  Other: {averageOtherTime}  -  Total: {averageBuildTime + averageOtherTime}  - Empty: {averageCellsToFill}");
+#else
+        GenerateGame();
+#endif
+    }
+
+    /// <summary>
+    /// Randommly generates a new game of <see cref="difficulty"/>.
+    /// </summary>
+    private void GenerateGame()
+    {
         scoreBoard.ResetScoreBoard();
+
+#if UNITY_EDITOR
+        System.Diagnostics.Stopwatch buildTimer = new();
+        System.Diagnostics.Stopwatch otherTimer = new();
 
         do
         {
-            buildSw.Start();
+            buildTimer.Start();
             BuildGame();
-            buildSw.Stop();
-
-            // Reset once game built
-            ResetToStart();
-            CheckSolution();
+            buildTimer.Stop();
 
             // Guard clause if already removed enough
             if (allCells.Length - startPoint.Count == (int)difficulty)
                 break;
 
-            otherSw.Start();
-            // Try to remove more values
-            for (int i = 0; i < allCells.Length; i++)
-            {
-                if (allCells.Length - startPoint.Count == (int)difficulty)
-                    break;
-
-                if (allCells[i].IsEmpty)
-                    continue;
-
-                int value = allCells[i].CellValue;
-
-                // Remove value
-                allCells[i].ClearCell();
-                startPoint.Remove(i);
-
-                // Try to solve
-                Solve();
-
-                //If can't solve, replace value
-                if (!scoreBoard.HasFinished)
-                {
-                    allCells[i].CellValue = value;
-                    startPoint.Add(i, value);
-                }
-                else
-                {
-                    startPoint.Remove(i);
-                }
-
-                ResetToStart();
-            }
-            otherSw.Stop();
+            otherTimer.Start();
+            AdvancedRemoveCellValue();
+            otherTimer.Stop();
         } while (allCells.Length - startPoint.Count < (int)difficulty - 5);
 
-#if UNITY_EDITOR
-        UnityEngine.Debug.Log($"Build: {buildSw.ElapsedMilliseconds}");
-        UnityEngine.Debug.Log($"Other: {otherSw.ElapsedMilliseconds}");
+        CheckSolution();
+
+        var totalFilledCells = scoreBoard.NumCellsFilled + startPoint.Count;
+        var cellsRemaining = allCells.Length - totalFilledCells;
+
+        // Add elapsed time to iteration times
+        iterationTimes.Add((buildTimer.ElapsedMilliseconds, otherTimer.ElapsedMilliseconds, cellsRemaining));
+#else
+        do
+        {
+            BuildGame();
+
+            // Guard clause if already removed enough
+            if (allCells.Length - startPoint.Count == (int)difficulty)
+                break;
+
+            AdvancedRemoveCellValue();
+        } while (allCells.Length - startPoint.Count < (int)difficulty - 5);
 #endif
     }
 
+    /// <summary>
+    /// Just for testing - use GenerateFinishedSolution() instead
+    /// </summary>
+    [System.Obsolete("Just for testing - use GenerateFinishedSolution() instead")]
     private void GenerateFinishedSolution2()
     {
         EmptyAllCells();
@@ -316,6 +311,9 @@ public sealed class SudokuController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Fills the board with legal values (Note: legal != uniquely solvable)
+    /// </summary>
     private void GenerateFinishedSolution()
     {
         // Esnure all cells are empty to start
@@ -353,7 +351,7 @@ public sealed class SudokuController : MonoBehaviour
                 }
 
                 // Assign current cell a random value from those possible
-                allRows[rowIndex][cellIndex].CellValue = possibleValues[Random.Range(0, possibleValues.Count)];
+                allRows[rowIndex][cellIndex].SetCellValueWithoutSynch(possibleValues[Random.Range(0, possibleValues.Count)]);
             }
 
             // Handle start over
@@ -378,35 +376,31 @@ public sealed class SudokuController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Attempt to build the game board untill a solvable board is built.
+    /// </summary>
     private void BuildGame()
     {
-        GenerateFinishedSolution();
-
-        // Remove cell values from the grid
-        RemoveCellValues();
-
-        // Populate 'startPoint' dict
-        SaveStartPoint();
-
-        // Validate with solver
-        Solve();
-
-        // If couldn't solve, build a new game
-        if (!scoreBoard.HasFinished)
-            BuildGame();
-        else
+        do
         {
+            GenerateFinishedSolution();
+            RemoveCellValues();
+            SaveStartPoint();
+        } while (!Solve());
 
-        }
+        ResetToStart();
     }
 
-    public void Solve()
+    /// <summary>
+    /// Attempts to solve the current puzzle
+    /// </summary>
+    /// <returns>true - if solved, false if not solved</returns>
+    public bool Solve()
     {
         int count = 0;
 
         while (!scoreBoard.HasFinished && count < 10)
         {
-
             // Loop over all cells
             for (int cellIndex = 0; cellIndex < allCells.Length; cellIndex++)
             {
@@ -434,8 +428,13 @@ public sealed class SudokuController : MonoBehaviour
             CheckSolution();
             count++;
         }
+
+        return scoreBoard.HasFinished;
     }
 
+    /// <summary>
+    /// Attempts to remove n cells from the board (n = difficulty).
+    /// </summary>
     private void RemoveCellValues()
     {
         var availableCells = new List<NumberCell>(allCells);
@@ -464,8 +463,45 @@ public sealed class SudokuController : MonoBehaviour
         }
     }
 
-    private delegate bool InferMethod(NumberCell cell);
-    private InferMethod inferMethod;
+    /// <summary>
+    /// Remove cell values NOT required to solve the puzzle. <br></br>
+    /// <b>Note:</b> Far slower, but more depth.
+    /// </summary>
+    private void AdvancedRemoveCellValue()
+    {
+
+        for (int i = 0; i < allCells.Length; i++)
+        {
+            if (allCells.Length - startPoint.Count == (int)difficulty)
+                break;
+
+            if (allCells[i].IsEmpty)
+                continue;
+
+            int value = allCells[i].CellValue;
+
+            // Remove value
+            allCells[i].ClearCell();
+            startPoint.Remove(i);
+
+            // Try to solve
+            Solve();
+
+            //If can't solve, replace value
+            if (!scoreBoard.HasFinished)
+            {
+                allCells[i].CellValue = value;
+                startPoint.Add(i, value);
+            }
+            else
+            {
+                startPoint.Remove(i);
+            }
+
+            ResetToStart();
+        }
+
+    }
 
     /// <summary>
     /// Method to check whether the passed <paramref name="cell"/> value can be inferred from the value of other
@@ -734,7 +770,7 @@ public sealed class SudokuController : MonoBehaviour
 
             values += "]";
 
-            UnityEngine.Debug.Log($"{key} - {values}");
+            Debug.Log($"{key} - {values}");
 
         }
 
