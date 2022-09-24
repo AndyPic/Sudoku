@@ -125,7 +125,7 @@ public sealed class SudokuController : MonoBehaviour
 
         long averageBuildTime = 0L;
         long averageOtherTime = 0L;
-        int averageCellsToFill = 0;
+        double averageCellsToFill = 0;
 
         for (int i = 0; i < iterationTimes.Count(); i++)
         {
@@ -138,7 +138,7 @@ public sealed class SudokuController : MonoBehaviour
         averageOtherTime /= iterationTimes.Count();
         averageCellsToFill /= iterationTimes.Count();
 
-        Debug.Log($"Build: {averageBuildTime}  -  Other: {averageOtherTime}  -  Total: {averageBuildTime + averageOtherTime}  - Empty: {averageCellsToFill}");
+        Debug.Log($"Build: {averageBuildTime}  -  Other: {averageOtherTime}  -  Total: {averageBuildTime + averageOtherTime}  - Empty: {averageCellsToFill:#.##} - Count: {iterationTimes.Count()}");
 #else
         GenerateGame();
 #endif
@@ -325,7 +325,6 @@ public sealed class SudokuController : MonoBehaviour
         for (int rowIndex = 0; rowIndex < allRows.Length; rowIndex++)
         {
             bool startOver = false;
-            int rowAttempts = 0;
 
             // Loop over cells in row
             for (int cellIndex = 0; cellIndex < allRows[rowIndex].Length; cellIndex++)
@@ -333,25 +332,17 @@ public sealed class SudokuController : MonoBehaviour
                 if (!allRows[rowIndex][cellIndex].IsEmpty)
                     continue;
 
-                var possibleValues = GetCellDirectPossibleValues(allRows[rowIndex][cellIndex]);
+                var possibleValues = GetCellPossibleValues(allRows[rowIndex][cellIndex]);
 
                 // If no possible values, restart the row
-                if (possibleValues.Count == 0)
+                if (possibleValues.Length == 0)
                 {
-                    // If tried to build the row 10 times unsucesfully, restart puzzle
-                    if (rowAttempts > 10)
-                    {
-                        startOver = true;
-                        break;
-                    }
-
-                    rowAttempts++;
-                    cellIndex = -1;
-                    continue;
+                    startOver = true;
+                    break;
                 }
 
                 // Assign current cell a random value from those possible
-                allRows[rowIndex][cellIndex].SetCellValueWithoutSynch(possibleValues[Random.Range(0, possibleValues.Count)]);
+                allRows[rowIndex][cellIndex].SetCellValueWithoutSynch(possibleValues[Random.Range(0, possibleValues.Length)]);
             }
 
             // Handle start over
@@ -392,10 +383,18 @@ public sealed class SudokuController : MonoBehaviour
     }
 
     /// <summary>
+    /// public + void wrapper for Solve() method - can't call method with return type other than void from button.
+    /// </summary>
+    public void SolvePuzzle()
+    {
+        Solve();
+    }
+
+    /// <summary>
     /// Attempts to solve the current puzzle
     /// </summary>
     /// <returns>true - if solved, false if not solved</returns>
-    public bool Solve()
+    private bool Solve()
     {
         int count = 0;
 
