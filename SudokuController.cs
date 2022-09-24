@@ -399,7 +399,7 @@ public sealed class SudokuController : MonoBehaviour
     {
         int count = 0;
 
-        while (!scoreBoard.HasFinished && count < 10)
+        while (!scoreBoard.HasFinished && count < 6)
         {
             // Loop over all cells
             for (int cellIndex = 0; cellIndex < allCells.Length; cellIndex++)
