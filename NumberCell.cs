@@ -49,7 +49,7 @@ public class NumberCell : MonoBehaviour
 
     public bool IsEmpty
     {
-        get { return !Enumerable.Range(1, 9).Contains(CellValue); }
+        get { return cellValue == 0; }
     }
 
     public int CellValue
