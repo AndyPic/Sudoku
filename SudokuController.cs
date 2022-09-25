@@ -15,7 +15,7 @@ public sealed class SudokuController : MonoBehaviour
 #if UNITY_EDITOR
     [SerializeField, Tooltip("The number of times to repeat the build")]
     private int iterations = 1;
-    private readonly List<(long, long, int)> iterationTimes = new();
+    private readonly List<(long, long, int)> iterationInfo = new();
 #endif
 
     private int[] cellPossibleValues = new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
@@ -127,18 +127,18 @@ public sealed class SudokuController : MonoBehaviour
         long averageOtherTime = 0L;
         double averageCellsToFill = 0;
 
-        for (int i = 0; i < iterationTimes.Count(); i++)
+        for (int i = 0; i < iterationInfo.Count(); i++)
         {
-            averageBuildTime += iterationTimes[i].Item1;
-            averageOtherTime += iterationTimes[i].Item2;
-            averageCellsToFill += iterationTimes[i].Item3;
+            averageBuildTime += iterationInfo[i].Item1;
+            averageOtherTime += iterationInfo[i].Item2;
+            averageCellsToFill += iterationInfo[i].Item3;
         }
 
-        averageBuildTime /= iterationTimes.Count();
-        averageOtherTime /= iterationTimes.Count();
-        averageCellsToFill /= iterationTimes.Count();
+        averageBuildTime /= iterationInfo.Count();
+        averageOtherTime /= iterationInfo.Count();
+        averageCellsToFill /= iterationInfo.Count();
 
-        Debug.Log($"Build: {averageBuildTime}  -  Other: {averageOtherTime}  -  Total: {averageBuildTime + averageOtherTime}  - Empty: {averageCellsToFill:#.##} - Count: {iterationTimes.Count()}");
+        Debug.Log($"Build: {averageBuildTime}  -  Other: {averageOtherTime}  -  Total: {averageBuildTime + averageOtherTime}  - Empty: {averageCellsToFill:#.##} - Count: {iterationInfo.Count()}");
 #else
         GenerateGame();
 #endif
@@ -176,7 +176,7 @@ public sealed class SudokuController : MonoBehaviour
         var cellsRemaining = allCells.Length - totalFilledCells;
 
         // Add elapsed time to iteration times
-        iterationTimes.Add((buildTimer.ElapsedMilliseconds, otherTimer.ElapsedMilliseconds, cellsRemaining));
+        iterationInfo.Add((buildTimer.ElapsedMilliseconds, otherTimer.ElapsedMilliseconds, cellsRemaining));
 #else
         do
         {
@@ -189,126 +189,6 @@ public sealed class SudokuController : MonoBehaviour
             AdvancedRemoveCellValue();
         } while (allCells.Length - startPoint.Count < (int)difficulty - 5);
 #endif
-    }
-
-    /// <summary>
-    /// Just for testing - use GenerateFinishedSolution() instead
-    /// </summary>
-    [System.Obsolete("Just for testing - use GenerateFinishedSolution() instead")]
-    private void GenerateFinishedSolution2()
-    {
-        EmptyAllCells();
-
-        var allRows = allAreas[0..9];
-
-        List<int> possibleValues = new(cellPossibleValues);
-
-        // Fill top-left cube
-        for (int rowIndex = 0; rowIndex < 3; rowIndex++)
-        {
-            for (int cellIndex = 0; cellIndex < 3; cellIndex++)
-            {
-                var cell = allRows[rowIndex][cellIndex];
-
-                // Get a random value to fill the cell with
-                var valueIndex = Random.Range(0, possibleValues.Count);
-                cell.CellValue = possibleValues[valueIndex];
-                possibleValues.RemoveAt(valueIndex);
-            }
-        }
-
-        // Fill top-middle cube
-        allRows[0][3].CellValue = allRows[1][0].CellValue;
-        allRows[0][4].CellValue = allRows[1][2].CellValue;
-        allRows[0][5].CellValue = allRows[2][0].CellValue;
-
-        allRows[1][3].CellValue = allRows[2][1].CellValue;
-        allRows[1][4].CellValue = allRows[2][2].CellValue;
-        allRows[1][5].CellValue = allRows[0][1].CellValue;
-
-        allRows[2][3].CellValue = allRows[0][0].CellValue;
-        allRows[2][4].CellValue = allRows[0][2].CellValue;
-        allRows[2][5].CellValue = allRows[1][1].CellValue;
-
-        // Fill top-right cube
-        for (int rowIndex = 0; rowIndex < 3; rowIndex++)
-        {
-            for (int cellIndex = 6; cellIndex < allRows[rowIndex].Length; cellIndex++)
-            {
-                var cell = allRows[rowIndex][cellIndex];
-
-                // Get a random value to fill the cell with
-                var possible = GetCellDirectPossibleValues(cell);
-                cell.CellValue = possible[Random.Range(0, possible.Count)];
-            }
-        }
-
-        possibleValues = new(cellPossibleValues);
-        possibleValues.Remove(allRows[0][0].CellValue);
-        possibleValues.Remove(allRows[1][0].CellValue);
-        possibleValues.Remove(allRows[2][0].CellValue);
-
-
-        // Fill left-hand column
-        for (int rowIndex = 3; rowIndex < allRows.Length; rowIndex++)
-        {
-            var cell = allRows[rowIndex][0];
-
-            if (!cell.IsEmpty)
-            {
-                possibleValues.Remove(cell.CellValue);
-                continue;
-            }
-
-            // Get a random value to fill the cell with
-            var valueIndex = Random.Range(0, possibleValues.Count);
-            cell.CellValue = possibleValues[valueIndex];
-            possibleValues.RemoveAt(valueIndex);
-        }
-
-        // Save this as start point
-        SaveStartPoint();
-
-        // Fill the rest of the grid
-        // Loop over rows
-        for (int rowIndex = 3; rowIndex < allRows.Length; rowIndex++)
-        {
-            bool startOver = false;
-            int rowAttempts = 0;
-
-            // Loop over cells in row
-            for (int cellIndex = 1; cellIndex < allRows[rowIndex].Length; cellIndex++)
-            {
-                if (!allRows[rowIndex][cellIndex].IsEmpty)
-                    continue;
-
-                var possValues = GetCellDirectPossibleValues(allRows[rowIndex][cellIndex]);
-
-                // If no possible values, restart the row
-                if (possValues.Count == 0)
-                {
-                    // If tried to build the row 10 times unsucesfully, restart puzzle
-                    if (rowAttempts > 10)
-                    {
-                        startOver = true;
-                        break;
-                    }
-
-                    rowAttempts++;
-                    cellIndex = -1;
-                    continue;
-                }
-
-                // Assign current cell a random value from those possible
-                allRows[rowIndex][cellIndex].CellValue = possValues[Random.Range(0, possValues.Count)];
-            }
-
-            // Handle start over
-            if (startOver)
-            {
-                GenerateFinishedSolution2();
-            }
-        }
     }
 
     /// <summary>
@@ -342,7 +222,7 @@ public sealed class SudokuController : MonoBehaviour
                 }
 
                 // Assign current cell a random value from those possible
-                allRows[rowIndex][cellIndex].SetCellValueWithoutSynch(possibleValues[Random.Range(0, possibleValues.Length)]);
+                allRows[rowIndex][cellIndex].CellValueNoSynch = possibleValues[Random.Range(0, possibleValues.Length)];
             }
 
             // Handle start over
@@ -421,6 +301,7 @@ public sealed class SudokuController : MonoBehaviour
             for (int i = 0; i < allAreas.Length; i++)
             {
                 // Check the area for value occurance
+                // Note: Most time taken here!
                 CheckAreaValueOccurance(allAreas[i], true);
             }
 
@@ -468,7 +349,6 @@ public sealed class SudokuController : MonoBehaviour
     /// </summary>
     private void AdvancedRemoveCellValue()
     {
-
         for (int i = 0; i < allCells.Length; i++)
         {
             if (allCells.Length - startPoint.Count == (int)difficulty)
@@ -484,6 +364,7 @@ public sealed class SudokuController : MonoBehaviour
             startPoint.Remove(i);
 
             // Try to solve
+            // Note: Most time here!
             Solve();
 
             //If can't solve, replace value
@@ -499,7 +380,6 @@ public sealed class SudokuController : MonoBehaviour
 
             ResetToStart();
         }
-
     }
 
     /// <summary>
