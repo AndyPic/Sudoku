@@ -64,6 +64,15 @@ public class NumberCell : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// <b>WARNING</b> - ONLY use this if cell will definately be reset. <br></br>
+    /// Sets the cell value without synching the GameObject display of the cell.
+    /// </summary>
+    public int CellValueNoSynch
+    {
+        set { cellValue = value; }
+    }
+
     public AnnotationsContainer Annotations { get => annotations; }
     public bool LegalityEvaluated { get => legalityEvaluated; }
 
@@ -73,16 +82,6 @@ public class NumberCell : MonoBehaviour
 
         valueDisplay = transform.Find("Value").GetComponent<TextMeshProUGUI>();
         annotationDisplay = transform.Find("Annotation").GetComponent<TextMeshProUGUI>();
-    }
-
-    /// <summary>
-    /// <b>WARNING</b> - ONLY use this if cell will definately be reset. <br></br>
-    /// Sets the cell value without synching the GameObject display of the cell.
-    /// </summary>
-    /// <param name="newValue"></param>
-    public void SetCellValueWithoutSynch(int newValue)
-    {
-        cellValue = newValue;
     }
 
     /// <summary>
@@ -126,32 +125,27 @@ public class NumberCell : MonoBehaviour
         if (isStartingValue)
             return;
 
-        switch (SudokuController.Instance.Annotate)
+        if (SudokuController.Instance.Annotate)
         {
-            // Handle annotation change
-            case true:
-                Annotations[SudokuController.Instance.NumberSelected - 1] = !Annotations[SudokuController.Instance.NumberSelected - 1];
-                break;
+            Annotations[SudokuController.Instance.NumberSelected - 1] = !Annotations[SudokuController.Instance.NumberSelected - 1];
+        }
+        else
+        {
+            // Reset illegal flag
+            IsIllegalValue = false;
 
-            // Handle value change
-            case false:
-                // Reset illegal flag
-                IsIllegalValue = false;
-
-                if (CellValue == SudokuController.Instance.NumberSelected)
-                {
-                    // Clear value and activate annotations
-                    annotationDisplay.gameObject.SetActive(true);
-                    CellValue = 0;
-                }
-                else
-                {
-                    // Disable annotations and change value
-                    annotationDisplay.gameObject.SetActive(false);
-                    CellValue = SudokuController.Instance.NumberSelected;
-                }
-
-                break;
+            if (CellValue == SudokuController.Instance.NumberSelected)
+            {
+                // Clear value and activate annotations
+                annotationDisplay.gameObject.SetActive(true);
+                CellValue = 0;
+            }
+            else
+            {
+                // Disable annotations and change value
+                annotationDisplay.gameObject.SetActive(false);
+                CellValue = SudokuController.Instance.NumberSelected;
+            }
         }
 
         // Check the solution
